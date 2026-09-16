@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>CRUD Clientes — JSON:API</title>
+</head>
+<body>
+  <h1>CRUD Clientes</h1>
+
+  <h2 id="form-title">Crear Cliente</h2>
+  <form id="cliente-form">
+    <input type="hidden" id="cliente-id">
+    <label>Nombre: <input type="text" id="nombre" required></label><br>
+    <label>Apellido: <input type="text" id="apellido" required></label><br>
+    <label>DNI: <input type="text" id="dni" required></label><br>
+    <label>Email: <input type="email" id="email" required></label><br><br>
+    <button type="submit">Guardar</button>
+    <button type="button" id="btn-cancelar" hidden onclick="cancelarEdicion()">Cancelar</button>
+  </form>
+
+  <hr>
+
+  <h2>Buscar Cliente por ID</h2>
+  <label>ID: <input type="number" id="buscar-id" min="1"></label>
+  <button onclick="buscarPorId()">Buscar</button>
+  <div id="resultado-busqueda"></div>
+
+  <hr>
+
+  <h2>Lista de Clientes</h2>
+  <table border="1">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Apellido</th>
+        <th>DNI</th>
+        <th>Email</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="tabla-clientes"></tbody>
+  </table>
+
+  <script>
+    const API = '/api/clientes';
+    const HEADERS = { 'Content-Type': 'application/vnd.api+json' };
+
+    // ─── Listar ───────────────────────────────────────────────
+    async function listar() {
+      const res = await fetch(API, { headers: { 'Accept': 'application/vnd.api+json' } });
+      const json = await res.json();
+      const tbody = document.getElementById('tabla-clientes');
+      tbody.innerHTML = '';
+      json.data.forEach(function(recurso) {
+        const a = recurso.attributes;
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + recurso.id + '</td>' +
+          '<td>' + a.nombre + '</td>' +
+          '<td>' + a.apellido + '</td>' +
+          '<td>' + a.dni + '</td>' +
+          '<td>' + a.email + '</td>' +
+          '<td>' +
+            '<button onclick="editar(' + recurso.id + ')">Editar</button> ' +
+            '<button onclick="eliminar(' + recurso.id + ')">Eliminar</button>' +
+          '</td>';
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ─── Buscar por ID ───────────────────────────────────────────
+    async function buscarPorId() {
+      var id = document.getElementById('buscar-id').value;
+      var div = document.getElementById('resultado-busqueda');
+      if (!id) {
+        div.innerHTML = '<p>Ingrese un ID.</p>';
+        return;
+      }
+      var res = await fetch(API + '/' + id, { headers: { 'Accept': 'application/vnd.api+json' } });
+      var json = await res.json();
+      if (json.errors) {
+        div.innerHTML = '<p><b>Error:</b> ' + json.errors[0].detail + '</p>';
+      } else {
+        var a = json.data.attributes;
+        div.innerHTML =
+          '<table border="1"><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th></tr>' +
+          '<tr><td>' + json.data.id + '</td><td>' + a.nombre + '</td><td>' + a.apellido + '</td><td>' + a.dni + '</td><td>' + a.email + '</td></tr></table>';
+      }
+    }
+
+    // ─── Crear / Actualizar ───────────────────────────────────
+    document.getElementById('cliente-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const id = document.getElementById('cliente-id').value;
+      const body = {
+        data: {
+          type: 'clientes',
+          attributes: {
+            nombre: document.getElementById('nombre').value,
+            apellido: document.getElementById('apellido').value,
+            dni: document.getElementById('dni').value,
+            email: document.getElementById('email').value
+          }
+        }
+      };
+
+      if (id) {
+        // PATCH (actualizar)
+        await fetch(API + '/' + id, {
+          method: 'PATCH',
+          headers: HEADERS,
+          body: JSON.stringify(body)
+        });
+      } else {
+        // POST (crear)
+        await fetch(API, {
+          method: 'POST',
+          headers: HEADERS,
+          body: JSON.stringify(body)
+        });
+      }
+
+      cancelarEdicion();
+      listar();
+    });
+
+    // ─── Editar (cargar datos en el form) ─────────────────────
+    async function editar(id) {
+      const res = await fetch(API + '/' + id, { headers: { 'Accept': 'application/vnd.api+json' } });
+      const json = await res.json();
+      const a = json.data.attributes;
+
+      document.getElementById('cliente-id').value = json.data.id;
+      document.getElementById('nombre').value = a.nombre;
+      document.getElementById('apellido').value = a.apellido;
+      document.getElementById('dni').value = a.dni;
+      document.getElementById('email').value = a.email;
+
+      document.getElementById('form-title').textContent = 'Editar Cliente #' + id;
+      document.getElementById('btn-cancelar').hidden = false;
+    }
+
+    // ─── Eliminar ─────────────────────────────────────────────
+    async function eliminar(id) {
+      if (!confirm('¿Eliminar cliente #' + id + '?')) return;
+      await fetch(API + '/' + id, { method: 'DELETE' });
+      listar();
+    }
+
+    // ─── Cancelar edición ─────────────────────────────────────
+    function cancelarEdicion() {
+      document.getElementById('cliente-form').reset();
+      document.getElementById('cliente-id').value = '';
+      document.getElementById('form-title').textContent = 'Crear Cliente';
+      document.getElementById('btn-cancelar').hidden = true;
+    }
+
+    // Cargar lista al inicio
+    listar();
+  </script>
+</body>
+</html>
