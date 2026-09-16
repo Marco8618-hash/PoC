@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import clienteRoutes from "./routes/clienteRoutes";
-import { validateClienteContentType, clienteErrorHandler } from "./middleware/clienteMiddleware";
+import { validateClienteContentType, clienteErrorHandler, benchmarkMiddleware } from "./middleware/clienteMiddleware";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +12,9 @@ app.use(express.json());
 
 // Servir archivos estáticos (frontend)
 app.use(express.static(path.join(__dirname, "..", "public")));
+
+// Middleware benchmark (mide bytes enviados/recibidos)
+app.use("/api/clientes", benchmarkMiddleware);
 
 // Middleware JSON:API
 app.use("/api/clientes", validateClienteContentType);

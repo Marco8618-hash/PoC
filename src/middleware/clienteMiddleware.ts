@@ -2,6 +2,29 @@ import { Request, Response, NextFunction } from "express";
 import { Cliente } from "../domain/cliente";
 import { ZodError } from "zod";
 
+// ─── Benchmark: medir bytes enviados y recibidos ────────────────────────────
+
+export function benchmarkMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Bytes enviados por el cliente (request body)
+  const requestBody = req.body ? JSON.stringify(req.body) : "";
+  const bytesEnviados = Buffer.byteLength(requestBody, "utf8");
+
+  // Interceptar res.json para medir bytes recibidos por el cliente (response body)
+  const originalJson = res.json.bind(res);
+  res.json = function (body: any): Response {
+    const responseBody = JSON.stringify(body);
+    const bytesRecibidos = Buffer.byteLength(responseBody, "utf8");
+
+    res.set("X-Bytes-Enviados", String(bytesEnviados));
+    res.set("X-Bytes-Recibidos", String(bytesRecibidos));
+    res.set("Access-Control-Expose-Headers", "X-Bytes-Enviados, X-Bytes-Recibidos");
+
+    return originalJson(body);
+  };
+
+  next();
+}
+
 // ─── Content-Type Validation ────────────────────────────────────────────────
 
 const JSON_API_CONTENT_TYPE = "application/vnd.api+json";
@@ -25,7 +48,7 @@ export function validateClienteContentType(req: Request, res: Response, next: Ne
   next();
 }
 
-// ─── Error Handler ──────────────────────────────────────────────────────────
+// ERROR HANDLER
 
 export function clienteErrorHandler(err: any, _req: Request, res: Response, _next: NextFunction): void {
   // Errores de validación Zod → 400 con detalle por campo
@@ -68,7 +91,7 @@ export function clienteErrorHandler(err: any, _req: Request, res: Response, _nex
   });
 }
 
-// ─── JSON:API Query Params Parser ───────────────────────────────────────────
+// Parametros de la Query
 
 export interface JsonApiQuery {
   filter: Record<string, string>;

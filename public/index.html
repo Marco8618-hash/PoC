@@ -65,7 +65,12 @@
   </fieldset>
 
   <p><code id="query-url"></code></p>
-  <p><b>Total:</b> <span id="meta-total">-</span></p>
+  <p>
+    <b>Total:</b> <span id="meta-total">-</span> &nbsp;|&nbsp;
+    <b>Bytes enviados:</b> <span id="bytes-enviados">-</span> &nbsp;|&nbsp;
+    <b>Bytes recibidos:</b> <span id="bytes-recibidos">-</span> &nbsp;|&nbsp;
+    <b>Tiempo:</b> <span id="tiempo-ms">-</span>
+  </p>
 
   <table border="1">
     <thead>
@@ -131,13 +136,22 @@
     }
 
     // ─── Listar / Filtrar ───────────────────────────────────
+    function mostrarBenchmark(res, inicio) {
+      var fin = performance.now();
+      document.getElementById('bytes-enviados').textContent = (res.headers.get('X-Bytes-Enviados') || '0') + ' B';
+      document.getElementById('bytes-recibidos').textContent = (res.headers.get('X-Bytes-Recibidos') || '0') + ' B';
+      document.getElementById('tiempo-ms').textContent = (fin - inicio).toFixed(1) + ' ms';
+    }
+
     async function listar(query) {
       if (!query) query = buildApiUrl();
+      var inicio = performance.now();
 
       if (query.byId) {
         // Búsqueda por ID → GET /api/clientes/:id
         var res = await fetch(query.apiUrl, { headers: { 'Accept': 'application/vnd.api+json' } });
         var json = await res.json();
+        mostrarBenchmark(res, inicio);
         document.getElementById('raw-response').textContent = JSON.stringify(json, null, 2);
 
         var tbody = document.getElementById('tabla-clientes');
@@ -169,6 +183,7 @@
       // Listado normal con filtros
       var res = await fetch(query.apiUrl, { headers: { 'Accept': 'application/vnd.api+json' } });
       var json = await res.json();
+      mostrarBenchmark(res, inicio);
       document.getElementById('raw-response').textContent = JSON.stringify(json, null, 2);
 
       if (json.meta && json.meta.total !== undefined) {
