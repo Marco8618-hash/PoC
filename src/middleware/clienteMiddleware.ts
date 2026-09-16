@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Cliente } from "../domain/cliente";
+import { ZodError } from "zod";
 
 // ─── Content-Type Validation ────────────────────────────────────────────────
 
@@ -24,9 +25,37 @@ export function validateClienteContentType(req: Request, res: Response, next: Ne
   next();
 }
 
-// ─── JSON:API Error Handler ─────────────────────────────────────────────────
+// ─── Error Handler ──────────────────────────────────────────────────────────
 
 export function clienteErrorHandler(err: any, _req: Request, res: Response, _next: NextFunction): void {
+  // Errores de validación Zod → 400 con detalle por campo
+  if (err instanceof ZodError) {
+    const errors = err.issues.map((e: any) => ({
+      status: "400",
+      title: "Datos inválidos",
+      detail: e.message,
+      source: { pointer: `/data/attributes/${e.path.join(".")}` },
+    }));
+    res.status(400).set("Content-Type", JSON_API_CONTENT_TYPE).json({ errors });
+    return;
+  }
+
+  // Errores de Prisma por unique constraint (dni/email duplicado) → 409
+  if (err.code === "P2002") {
+    const field = err.meta?.target?.[0] || "campo";
+    res.status(409).set("Content-Type", JSON_API_CONTENT_TYPE).json({
+      errors: [
+        {
+          status: "409",
+          title: "Conflict",
+          detail: `Ya existe un cliente con ese ${field}`,
+          source: { pointer: `/data/attributes/${field}` },
+        },
+      ],
+    });
+    return;
+  }
+
   const status = err.status || 500;
   res.status(status).set("Content-Type", JSON_API_CONTENT_TYPE).json({
     errors: [
@@ -39,10 +68,64 @@ export function clienteErrorHandler(err: any, _req: Request, res: Response, _nex
   });
 }
 
+// ─── JSON:API Query Params Parser ───────────────────────────────────────────
+
+export interface JsonApiQuery {
+  filter: Record<string, string>;
+  fields: string[];
+  sort: { field: string; order: "asc" | "desc" }[];
+  page: { limit?: number; offset?: number };
+}
+
+export function parseJsonApiQuery(query: Record<string, any>): JsonApiQuery {
+  // Express + qs parsea filter[campo]=valor como { filter: { campo: valor } }
+  const filter: Record<string, string> = {};
+  if (query.filter && typeof query.filter === "object") {
+    for (const [key, value] of Object.entries(query.filter)) {
+      if (typeof value === "string") filter[key] = value;
+    }
+  }
+
+  // Express + qs parsea fields[clientes]=x,y como { fields: { clientes: "x,y" } }
+  let fields: string[] = [];
+  if (query.fields && typeof query.fields === "object" && typeof query.fields.clientes === "string") {
+    fields = query.fields.clientes.split(",").map((f: string) => f.trim());
+  }
+
+  // sort=campo1,-campo2  (no usa brackets, llega como string)
+  let sort: { field: string; order: "asc" | "desc" }[] = [];
+  if (typeof query.sort === "string") {
+    sort = query.sort.split(",").map((s: string) => {
+      s = s.trim();
+      if (s.startsWith("-")) return { field: s.slice(1), order: "desc" as const };
+      return { field: s, order: "asc" as const };
+    });
+  }
+
+  // Express + qs parsea page[limit]=N como { page: { limit: "N" } }
+  const page: { limit?: number; offset?: number } = {};
+  if (query.page && typeof query.page === "object") {
+    if (query.page.limit) page.limit = Number(query.page.limit);
+    if (query.page.offset) page.offset = Number(query.page.offset);
+  }
+
+  return { filter, fields, sort, page };
+}
+
 // ─── JSON:API Serialization ─────────────────────────────────────────────────
 
-export function serializeCliente(cliente: Cliente, baseUrl: string) {
-  const { id_cliente, ...attributes } = cliente;
+function filterAttributes(allAttributes: Record<string, any>, fields?: string[]): Record<string, any> {
+  if (!fields || fields.length === 0) return allAttributes;
+  const filtered: Record<string, any> = {};
+  for (const field of fields) {
+    if (field in allAttributes) filtered[field] = allAttributes[field];
+  }
+  return filtered;
+}
+
+export function serializeCliente(cliente: Cliente, baseUrl: string, fields?: string[]) {
+  const { id_cliente, ...allAttributes } = cliente;
+  const attributes = filterAttributes(allAttributes, fields);
   return {
     data: {
       type: "clientes",
@@ -54,10 +137,11 @@ export function serializeCliente(cliente: Cliente, baseUrl: string) {
   };
 }
 
-export function serializeClientes(clientes: Cliente[], baseUrl: string) {
-  return {
+export function serializeClientes(clientes: Cliente[], baseUrl: string, fields?: string[], meta?: Record<string, any>) {
+  const result: any = {
     data: clientes.map((c) => {
-      const { id_cliente, ...attributes } = c;
+      const { id_cliente, ...allAttributes } = c;
+      const attributes = filterAttributes(allAttributes, fields);
       return {
         type: "clientes",
         id: String(id_cliente),
@@ -67,6 +151,8 @@ export function serializeClientes(clientes: Cliente[], baseUrl: string) {
     }),
     links: { self: `${baseUrl}/api/clientes` },
   };
+  if (meta) result.meta = meta;
+  return result;
 }
 
 export function deserializeClienteBody(body: any): Record<string, any> {

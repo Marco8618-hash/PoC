@@ -1,6 +1,11 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { clienteService } from "../service/clienteService";
-import { serializeCliente, serializeClientes, deserializeClienteBody } from "../middleware/clienteMiddleware";
+import {
+  serializeCliente,
+  serializeClientes,
+  deserializeClienteBody,
+  parseJsonApiQuery,
+} from "../middleware/clienteMiddleware";
 
 const router = Router();
 const CONTENT_TYPE = "application/vnd.api+json";
@@ -9,21 +14,27 @@ function getBaseUrl(req: Request): string {
   return `${req.protocol}://${req.get("host")}`;
 }
 
-// GET /api/clientes
+// GET /api/clientes  (soporta filter, fields, sort, page)
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const clientes = await clienteService.getAll();
-    res.set("Content-Type", CONTENT_TYPE).json(serializeClientes(clientes, getBaseUrl(req)));
+    const query = parseJsonApiQuery(req.query);
+    const [clientes, total] = await Promise.all([
+      clienteService.getAll({ filter: query.filter, sort: query.sort, page: query.page }),
+      clienteService.count(query.filter),
+    ]);
+    const body = serializeClientes(clientes, getBaseUrl(req), query.fields, { total });
+    res.set("Content-Type", CONTENT_TYPE).json(body);
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/clientes/:id
+// GET /api/clientes/:id  (soporta fields)
 router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const query = parseJsonApiQuery(req.query);
     const cliente = await clienteService.getById(Number(req.params.id));
-    res.set("Content-Type", CONTENT_TYPE).json(serializeCliente(cliente, getBaseUrl(req)));
+    res.set("Content-Type", CONTENT_TYPE).json(serializeCliente(cliente, getBaseUrl(req), query.fields));
   } catch (err) {
     next(err);
   }

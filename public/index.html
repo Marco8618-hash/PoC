@@ -5,29 +5,68 @@
   <title>CRUD Clientes — JSON:API</title>
 </head>
 <body>
-  <h1>CRUD Clientes</h1>
+  <h1>CRUD Clientes — JSON:API</h1>
 
+  <!-- ─── Crear / Editar ──────────────────────────────────── -->
   <h2 id="form-title">Crear Cliente</h2>
   <form id="cliente-form">
     <input type="hidden" id="cliente-id">
     <label>Nombre: <input type="text" id="nombre" required></label><br>
     <label>Apellido: <input type="text" id="apellido" required></label><br>
-    <label>DNI: <input type="text" id="dni" required></label><br>
+    <label>DNI: <input type="text" id="dni" required placeholder="7 a 9 dígitos"></label><br>
     <label>Email: <input type="email" id="email" required></label><br><br>
     <button type="submit">Guardar</button>
     <button type="button" id="btn-cancelar" hidden onclick="cancelarEdicion()">Cancelar</button>
   </form>
+  <div id="errores-form"></div>
 
   <hr>
 
-  <h2>Buscar Cliente por ID</h2>
-  <label>ID: <input type="number" id="buscar-id" min="1"></label>
-  <button onclick="buscarPorId()">Buscar</button>
-  <div id="resultado-busqueda"></div>
+  <!-- ─── Listar / Filtrar ────────────────────────────────── -->
+  <h2>Listar Clientes</h2>
 
-  <hr>
+  <fieldset>
+    <legend>Filtrar</legend>
 
-  <h2>Lista de Clientes</h2>
+    <label>Buscar por:
+      <select id="filter-campo">
+        <option value="">-- todos --</option>
+        <option value="id_cliente">ID</option>
+        <option value="nombre">Nombre</option>
+        <option value="apellido">Apellido</option>
+        <option value="dni">DNI</option>
+        <option value="email">Email</option>
+      </select>
+    </label>
+    <label>Valor: <input type="text" id="filter-valor"></label>
+    <br><br>
+
+    <b>Campos a mostrar (fields):</b>
+    <label><input type="checkbox" class="field-cb" value="nombre" checked> nombre</label>
+    <label><input type="checkbox" class="field-cb" value="apellido" checked> apellido</label>
+    <label><input type="checkbox" class="field-cb" value="dni" checked> dni</label>
+    <label><input type="checkbox" class="field-cb" value="email" checked> email</label>
+    <br>
+
+    <b>Ordenar por:</b>
+    <select id="sort-campo">
+      <option value="">-- sin orden --</option>
+      <option value="nombre">nombre ↑</option>
+      <option value="-nombre">nombre ↓</option>
+      <option value="apellido">apellido ↑</option>
+      <option value="-apellido">apellido ↓</option>
+      <option value="dni">dni ↑</option>
+      <option value="-dni">dni ↓</option>
+    </select>
+    <br><br>
+
+    <button onclick="aplicarFiltros()">Buscar</button>
+    <button onclick="limpiarFiltros()">Limpiar filtros</button>
+  </fieldset>
+
+  <p><code id="query-url"></code></p>
+  <p><b>Total:</b> <span id="meta-total">-</span></p>
+
   <table border="1">
     <thead>
       <tr>
@@ -42,25 +81,111 @@
     <tbody id="tabla-clientes"></tbody>
   </table>
 
-  <script>
-    const API = '/api/clientes';
-    const HEADERS = { 'Content-Type': 'application/vnd.api+json' };
+  <hr>
 
-    // ─── Listar ───────────────────────────────────────────────
-    async function listar() {
-      const res = await fetch(API, { headers: { 'Accept': 'application/vnd.api+json' } });
-      const json = await res.json();
-      const tbody = document.getElementById('tabla-clientes');
+  <details>
+    <summary><b>Última respuesta JSON:API (cruda)</b></summary>
+    <pre id="raw-response" style="background:#f0f0f0; padding:10px; max-height:300px; overflow:auto;"></pre>
+  </details>
+
+  <script>
+    var API = '/api/clientes';
+    var HEADERS = { 'Content-Type': 'application/vnd.api+json' };
+
+    // ─── Construir query params ──────────────────────────────
+    function buildApiUrl() {
+      var params = [];
+
+      var filterCampo = document.getElementById('filter-campo').value;
+      var filterValor = document.getElementById('filter-valor').value;
+
+      // Si busca por ID, es un GET /api/clientes/:id
+      if (filterCampo === 'id_cliente' && filterValor) {
+        var url = API + '/' + filterValor;
+        document.getElementById('query-url').textContent = 'GET ' + url;
+        return { apiUrl: url, byId: true };
+      }
+
+      // filter
+      if (filterCampo && filterValor) {
+        params.push('filter[' + filterCampo + ']=' + encodeURIComponent(filterValor));
+      }
+
+      // fields (sparse fieldsets)
+      var checks = document.querySelectorAll('.field-cb');
+      var fields = [];
+      checks.forEach(function(cb) { if (cb.checked) fields.push(cb.value); });
+      if (fields.length > 0 && fields.length < 4) {
+        params.push('fields[clientes]=' + fields.join(','));
+      }
+
+      // sort
+      var sort = document.getElementById('sort-campo').value;
+      if (sort) params.push('sort=' + sort);
+
+      var apiUrl = API;
+      if (params.length > 0) apiUrl += '?' + params.join('&');
+
+      document.getElementById('query-url').textContent = 'GET ' + apiUrl;
+      return { apiUrl: apiUrl, byId: false };
+    }
+
+    // ─── Listar / Filtrar ───────────────────────────────────
+    async function listar(query) {
+      if (!query) query = buildApiUrl();
+
+      if (query.byId) {
+        // Búsqueda por ID → GET /api/clientes/:id
+        var res = await fetch(query.apiUrl, { headers: { 'Accept': 'application/vnd.api+json' } });
+        var json = await res.json();
+        document.getElementById('raw-response').textContent = JSON.stringify(json, null, 2);
+
+        var tbody = document.getElementById('tabla-clientes');
+        tbody.innerHTML = '';
+        document.getElementById('meta-total').textContent = '-';
+
+        if (json.errors) {
+          tbody.innerHTML = '<tr><td colspan="6">' + json.errors[0].detail + '</td></tr>';
+          return;
+        }
+
+        var a = json.data.attributes;
+        document.getElementById('meta-total').textContent = '1';
+        tbody.innerHTML =
+          '<tr>' +
+          '<td>' + json.data.id + '</td>' +
+          '<td>' + (a.nombre !== undefined ? a.nombre : '-') + '</td>' +
+          '<td>' + (a.apellido !== undefined ? a.apellido : '-') + '</td>' +
+          '<td>' + (a.dni !== undefined ? a.dni : '-') + '</td>' +
+          '<td>' + (a.email !== undefined ? a.email : '-') + '</td>' +
+          '<td>' +
+            '<button onclick="editar(' + json.data.id + ')">Editar</button> ' +
+            '<button onclick="eliminar(' + json.data.id + ')">Eliminar</button>' +
+          '</td>' +
+          '</tr>';
+        return;
+      }
+
+      // Listado normal con filtros
+      var res = await fetch(query.apiUrl, { headers: { 'Accept': 'application/vnd.api+json' } });
+      var json = await res.json();
+      document.getElementById('raw-response').textContent = JSON.stringify(json, null, 2);
+
+      if (json.meta && json.meta.total !== undefined) {
+        document.getElementById('meta-total').textContent = json.meta.total;
+      }
+
+      var tbody = document.getElementById('tabla-clientes');
       tbody.innerHTML = '';
       json.data.forEach(function(recurso) {
-        const a = recurso.attributes;
-        const tr = document.createElement('tr');
+        var a = recurso.attributes;
+        var tr = document.createElement('tr');
         tr.innerHTML =
           '<td>' + recurso.id + '</td>' +
-          '<td>' + a.nombre + '</td>' +
-          '<td>' + a.apellido + '</td>' +
-          '<td>' + a.dni + '</td>' +
-          '<td>' + a.email + '</td>' +
+          '<td>' + (a.nombre !== undefined ? a.nombre : '-') + '</td>' +
+          '<td>' + (a.apellido !== undefined ? a.apellido : '-') + '</td>' +
+          '<td>' + (a.dni !== undefined ? a.dni : '-') + '</td>' +
+          '<td>' + (a.email !== undefined ? a.email : '-') + '</td>' +
           '<td>' +
             '<button onclick="editar(' + recurso.id + ')">Editar</button> ' +
             '<button onclick="eliminar(' + recurso.id + ')">Eliminar</button>' +
@@ -69,31 +194,24 @@
       });
     }
 
-    // ─── Buscar por ID ───────────────────────────────────────────
-    async function buscarPorId() {
-      var id = document.getElementById('buscar-id').value;
-      var div = document.getElementById('resultado-busqueda');
-      if (!id) {
-        div.innerHTML = '<p>Ingrese un ID.</p>';
-        return;
-      }
-      var res = await fetch(API + '/' + id, { headers: { 'Accept': 'application/vnd.api+json' } });
-      var json = await res.json();
-      if (json.errors) {
-        div.innerHTML = '<p><b>Error:</b> ' + json.errors[0].detail + '</p>';
-      } else {
-        var a = json.data.attributes;
-        div.innerHTML =
-          '<table border="1"><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th></tr>' +
-          '<tr><td>' + json.data.id + '</td><td>' + a.nombre + '</td><td>' + a.apellido + '</td><td>' + a.dni + '</td><td>' + a.email + '</td></tr></table>';
-      }
+    function aplicarFiltros() {
+      listar();
     }
 
-    // ─── Crear / Actualizar ───────────────────────────────────
+    function limpiarFiltros() {
+      document.getElementById('filter-campo').value = '';
+      document.getElementById('filter-valor').value = '';
+      document.getElementById('sort-campo').value = '';
+      document.querySelectorAll('.field-cb').forEach(function(cb) { cb.checked = true; });
+      listar();
+    }
+
+    // ─── Crear / Actualizar ─────────────────────────────────
     document.getElementById('cliente-form').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const id = document.getElementById('cliente-id').value;
-      const body = {
+      document.getElementById('errores-form').innerHTML = '';
+      var id = document.getElementById('cliente-id').value;
+      var body = {
         data: {
           type: 'clientes',
           attributes: {
@@ -105,55 +223,58 @@
         }
       };
 
+      var res;
       if (id) {
-        // PATCH (actualizar)
-        await fetch(API + '/' + id, {
-          method: 'PATCH',
-          headers: HEADERS,
-          body: JSON.stringify(body)
-        });
+        res = await fetch(API + '/' + id, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(body) });
       } else {
-        // POST (crear)
-        await fetch(API, {
-          method: 'POST',
-          headers: HEADERS,
-          body: JSON.stringify(body)
+        res = await fetch(API, { method: 'POST', headers: HEADERS, body: JSON.stringify(body) });
+      }
+
+      if (res.status === 204) { cancelarEdicion(); listar(); return; }
+      var json = await res.json();
+
+      if (json.errors) {
+        var html = '<ul>';
+        json.errors.forEach(function(err) {
+          html += '<li><b>' + (err.source ? err.source.pointer : '') + ':</b> ' + err.detail + '</li>';
         });
+        html += '</ul>';
+        document.getElementById('errores-form').innerHTML = html;
+        return;
       }
 
       cancelarEdicion();
       listar();
     });
 
-    // ─── Editar (cargar datos en el form) ─────────────────────
+    // ─── Editar ─────────────────────────────────────────────
     async function editar(id) {
-      const res = await fetch(API + '/' + id, { headers: { 'Accept': 'application/vnd.api+json' } });
-      const json = await res.json();
-      const a = json.data.attributes;
-
+      var res = await fetch(API + '/' + id, { headers: { 'Accept': 'application/vnd.api+json' } });
+      var json = await res.json();
+      var a = json.data.attributes;
       document.getElementById('cliente-id').value = json.data.id;
       document.getElementById('nombre').value = a.nombre;
       document.getElementById('apellido').value = a.apellido;
       document.getElementById('dni').value = a.dni;
       document.getElementById('email').value = a.email;
-
       document.getElementById('form-title').textContent = 'Editar Cliente #' + id;
       document.getElementById('btn-cancelar').hidden = false;
     }
 
-    // ─── Eliminar ─────────────────────────────────────────────
+    // ─── Eliminar ───────────────────────────────────────────
     async function eliminar(id) {
       if (!confirm('¿Eliminar cliente #' + id + '?')) return;
       await fetch(API + '/' + id, { method: 'DELETE' });
       listar();
     }
 
-    // ─── Cancelar edición ─────────────────────────────────────
+    // ─── Cancelar edición ───────────────────────────────────
     function cancelarEdicion() {
       document.getElementById('cliente-form').reset();
       document.getElementById('cliente-id').value = '';
       document.getElementById('form-title').textContent = 'Crear Cliente';
       document.getElementById('btn-cancelar').hidden = true;
+      document.getElementById('errores-form').innerHTML = '';
     }
 
     // Cargar lista al inicio
@@ -161,3 +282,4 @@
   </script>
 </body>
 </html>
+

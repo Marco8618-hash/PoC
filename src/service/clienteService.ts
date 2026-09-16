@@ -1,9 +1,14 @@
-import { clienteRepository } from "../repository/clienteRepository";
-import { CreateClienteInput, UpdateClienteInput } from "../domain/cliente";
+import { clienteRepository, QueryOptions } from "../repository/clienteRepository";
+import { CreateClienteInput, UpdateClienteInput, createClienteSchema, updateClienteSchema } from "../domain/cliente";
+import { ZodError } from "zod";
 
 export const clienteService = {
-  async getAll() {
-    return clienteRepository.findAll();
+  async getAll(options?: QueryOptions) {
+    return clienteRepository.findAll(options);
+  },
+
+  async count(filter?: Record<string, string>) {
+    return clienteRepository.count(filter);
   },
 
   async getById(id: number) {
@@ -15,13 +20,17 @@ export const clienteService = {
   },
 
   async create(data: CreateClienteInput) {
-    return clienteRepository.create(data);
+    // Validación con Zod
+    const parsed = createClienteSchema.parse(data);
+    return clienteRepository.create(parsed);
   },
 
   async update(id: number, data: UpdateClienteInput) {
     // Verifica que exista antes de actualizar
     await clienteService.getById(id);
-    return clienteRepository.update(id, data);
+    // Validación con Zod
+    const parsed = updateClienteSchema.parse(data);
+    return clienteRepository.update(id, parsed);
   },
 
   async remove(id: number) {
