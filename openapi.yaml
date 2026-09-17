@@ -1,0 +1,613 @@
+openapi: 3.0.3
+info:
+  title: CRUD Cliente – JSON:API
+  description: |
+    API RESTful para la gestión de clientes, implementada siguiendo la
+    especificación [JSON:API v1.1](https://jsonapi.org/).
+
+    Todas las respuestas exitosas utilizan el content-type
+    `application/vnd.api+json`. Las peticiones `POST` y `PATCH` deben
+    enviarse con ese mismo content-type.
+  version: 1.0.0
+  contact:
+    name: Equipo DSW
+
+servers:
+  - url: http://localhost:3000
+    description: Servidor local de desarrollo
+
+tags:
+  - name: Clientes
+    description: Operaciones CRUD sobre el recurso Cliente
+
+# ────────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ────────────────────────────────────────────────────────────────────────────────
+
+paths:
+  /api/clientes:
+    # ── GET  /api/clientes ──────────────────────────────────────────────────────
+    get:
+      operationId: listClientes
+      tags: [Clientes]
+      summary: Listar clientes
+      description: |
+        Devuelve una colección de clientes con soporte para filtrado,
+        ordenamiento, paginación y sparse fieldsets según JSON:API.
+      parameters:
+        - $ref: "#/components/parameters/FilterNombre"
+        - $ref: "#/components/parameters/FilterApellido"
+        - $ref: "#/components/parameters/FilterDni"
+        - $ref: "#/components/parameters/FilterEmail"
+        - $ref: "#/components/parameters/FieldsClientes"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/PageOffset"
+      responses:
+        "200":
+          description: Colección de clientes
+          headers:
+            X-Bytes-Enviados:
+              $ref: "#/components/headers/X-Bytes-Enviados"
+            X-Bytes-Recibidos:
+              $ref: "#/components/headers/X-Bytes-Recibidos"
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: "#/components/schemas/ClienteCollectionResponse"
+              example:
+                data:
+                  - type: clientes
+                    id: "1"
+                    attributes:
+                      nombre: Juan
+                      apellido: Pérez
+                      dni: "12345678"
+                      email: juan@example.com
+                    links:
+                      self: http://localhost:3000/api/clientes/1
+                  - type: clientes
+                    id: "2"
+                    attributes:
+                      nombre: María
+                      apellido: García
+                      dni: "87654321"
+                      email: maria@example.com
+                    links:
+                      self: http://localhost:3000/api/clientes/2
+                links:
+                  self: http://localhost:3000/api/clientes
+                meta:
+                  total: 2
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    # ── POST /api/clientes ──────────────────────────────────────────────────────
+    post:
+      operationId: createCliente
+      tags: [Clientes]
+      summary: Crear un cliente
+      description: |
+        Crea un nuevo cliente. El body debe seguir la estructura JSON:API.
+        Los atributos se validan con Zod (ver reglas en el schema).
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              $ref: "#/components/schemas/ClienteCreateRequest"
+            example:
+              data:
+                type: clientes
+                attributes:
+                  nombre: Juan
+                  apellido: Pérez
+                  dni: "12345678"
+                  email: juan@example.com
+      responses:
+        "201":
+          description: Cliente creado exitosamente
+          headers:
+            X-Bytes-Enviados:
+              $ref: "#/components/headers/X-Bytes-Enviados"
+            X-Bytes-Recibidos:
+              $ref: "#/components/headers/X-Bytes-Recibidos"
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: "#/components/schemas/ClienteSingleResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/clientes/{id}:
+    # ── GET  /api/clientes/:id ──────────────────────────────────────────────────
+    get:
+      operationId: getCliente
+      tags: [Clientes]
+      summary: Obtener un cliente por ID
+      description: |
+        Devuelve un único recurso cliente. Soporta sparse fieldsets
+        mediante el parámetro `fields[clientes]`.
+      parameters:
+        - $ref: "#/components/parameters/ClienteId"
+        - $ref: "#/components/parameters/FieldsClientes"
+      responses:
+        "200":
+          description: Recurso cliente
+          headers:
+            X-Bytes-Enviados:
+              $ref: "#/components/headers/X-Bytes-Enviados"
+            X-Bytes-Recibidos:
+              $ref: "#/components/headers/X-Bytes-Recibidos"
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: "#/components/schemas/ClienteSingleResponse"
+              example:
+                data:
+                  type: clientes
+                  id: "1"
+                  attributes:
+                    nombre: Juan
+                    apellido: Pérez
+                    dni: "12345678"
+                    email: juan@example.com
+                  links:
+                    self: http://localhost:3000/api/clientes/1
+                links:
+                  self: http://localhost:3000/api/clientes/1
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    # ── PATCH /api/clientes/:id ─────────────────────────────────────────────────
+    patch:
+      operationId: updateCliente
+      tags: [Clientes]
+      summary: Actualizar un cliente
+      description: |
+        Actualización parcial de un cliente existente. Solo se requieren
+        los atributos que se desean modificar.
+      parameters:
+        - $ref: "#/components/parameters/ClienteId"
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              $ref: "#/components/schemas/ClienteUpdateRequest"
+            example:
+              data:
+                type: clientes
+                attributes:
+                  email: nuevo-email@example.com
+      responses:
+        "200":
+          description: Cliente actualizado exitosamente
+          headers:
+            X-Bytes-Enviados:
+              $ref: "#/components/headers/X-Bytes-Enviados"
+            X-Bytes-Recibidos:
+              $ref: "#/components/headers/X-Bytes-Recibidos"
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: "#/components/schemas/ClienteSingleResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    # ── DELETE /api/clientes/:id ────────────────────────────────────────────────
+    delete:
+      operationId: deleteCliente
+      tags: [Clientes]
+      summary: Eliminar un cliente
+      description: Elimina un cliente por su ID. Devuelve 204 sin contenido.
+      parameters:
+        - $ref: "#/components/parameters/ClienteId"
+      responses:
+        "204":
+          description: Cliente eliminado exitosamente (sin contenido)
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+# ────────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# ────────────────────────────────────────────────────────────────────────────────
+
+components:
+  # ── Parameters ──────────────────────────────────────────────────────────────
+
+  parameters:
+    ClienteId:
+      name: id
+      in: path
+      required: true
+      description: ID numérico del cliente (`id_cliente`)
+      schema:
+        type: integer
+        minimum: 1
+        example: 1
+
+    FilterNombre:
+      name: filter[nombre]
+      in: query
+      required: false
+      description: Filtro parcial por nombre (contains)
+      schema:
+        type: string
+        example: Juan
+
+    FilterApellido:
+      name: filter[apellido]
+      in: query
+      required: false
+      description: Filtro parcial por apellido (contains)
+      schema:
+        type: string
+        example: Pérez
+
+    FilterDni:
+      name: filter[dni]
+      in: query
+      required: false
+      description: Filtro parcial por DNI (contains)
+      schema:
+        type: string
+        example: "1234"
+
+    FilterEmail:
+      name: filter[email]
+      in: query
+      required: false
+      description: Filtro parcial por email (contains)
+      schema:
+        type: string
+        example: juan
+
+    FieldsClientes:
+      name: fields[clientes]
+      in: query
+      required: false
+      description: |
+        Sparse fieldsets – lista de atributos separados por coma.
+        Campos válidos: `nombre`, `apellido`, `dni`, `email`.
+      schema:
+        type: string
+        example: nombre,email
+
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        Campos de ordenamiento separados por coma.
+        Prefijo `-` para orden descendente.
+        Campos válidos: `id_cliente`, `nombre`, `apellido`, `dni`, `email`.
+      schema:
+        type: string
+        example: -apellido,nombre
+
+    PageLimit:
+      name: page[limit]
+      in: query
+      required: false
+      description: Cantidad máxima de registros a devolver
+      schema:
+        type: integer
+        minimum: 1
+        example: 10
+
+    PageOffset:
+      name: page[offset]
+      in: query
+      required: false
+      description: Cantidad de registros a saltar (offset-based pagination)
+      schema:
+        type: integer
+        minimum: 0
+        example: 0
+
+  # ── Headers ─────────────────────────────────────────────────────────────────
+
+  headers:
+    X-Bytes-Enviados:
+      description: Bytes del body enviado por el cliente en la request
+      schema:
+        type: string
+        example: "142"
+
+    X-Bytes-Recibidos:
+      description: Bytes del body devuelto en la response
+      schema:
+        type: string
+        example: "385"
+
+  # ── Schemas ─────────────────────────────────────────────────────────────────
+
+  schemas:
+    # ── Atributos ─────────────────────────────────────────────────────────────
+
+    ClienteAttributes:
+      type: object
+      description: Atributos completos de un cliente
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+          example: Juan
+        apellido:
+          type: string
+          maxLength: 100
+          example: Pérez
+        dni:
+          type: string
+          maxLength: 20
+          pattern: '^\d{7,9}$'
+          description: DNI numérico de 7 a 9 dígitos
+          example: "12345678"
+        email:
+          type: string
+          format: email
+          maxLength: 150
+          example: juan@example.com
+
+    ClienteCreateAttributes:
+      type: object
+      description: Atributos requeridos para crear un cliente
+      required:
+        - nombre
+        - apellido
+        - dni
+        - email
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Juan
+        apellido:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Pérez
+        dni:
+          type: string
+          maxLength: 20
+          pattern: '^\d{7,9}$'
+          description: DNI numérico de 7 a 9 dígitos
+          example: "12345678"
+        email:
+          type: string
+          format: email
+          maxLength: 150
+          example: juan@example.com
+
+    ClienteUpdateAttributes:
+      type: object
+      description: Atributos opcionales para actualizar un cliente (parcial)
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Juan
+        apellido:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Pérez
+        dni:
+          type: string
+          maxLength: 20
+          pattern: '^\d{7,9}$'
+          example: "12345678"
+        email:
+          type: string
+          format: email
+          maxLength: 150
+          example: nuevo-email@example.com
+
+    # ── Resource Objects ──────────────────────────────────────────────────────
+
+    ClienteResource:
+      type: object
+      description: Recurso JSON:API de un cliente
+      required:
+        - type
+        - id
+        - attributes
+      properties:
+        type:
+          type: string
+          enum: [clientes]
+        id:
+          type: string
+          description: ID del cliente como string (JSON:API requiere strings)
+          example: "1"
+        attributes:
+          $ref: "#/components/schemas/ClienteAttributes"
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+              format: uri
+              example: http://localhost:3000/api/clientes/1
+
+    # ── Request Bodies ────────────────────────────────────────────────────────
+
+    ClienteCreateRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - type
+            - attributes
+          properties:
+            type:
+              type: string
+              enum: [clientes]
+            attributes:
+              $ref: "#/components/schemas/ClienteCreateAttributes"
+
+    ClienteUpdateRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - type
+            - attributes
+          properties:
+            type:
+              type: string
+              enum: [clientes]
+            attributes:
+              $ref: "#/components/schemas/ClienteUpdateAttributes"
+
+    # ── Response Bodies ───────────────────────────────────────────────────────
+
+    ClienteSingleResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/ClienteResource"
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+              format: uri
+
+    ClienteCollectionResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClienteResource"
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+              format: uri
+              example: http://localhost:3000/api/clientes
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total de clientes que coinciden con el filtro
+              example: 42
+
+    # ── Error Schemas ─────────────────────────────────────────────────────────
+
+    JsonApiError:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "400"
+        title:
+          type: string
+          example: Datos inválidos
+        detail:
+          type: string
+          example: El nombre es requerido
+        source:
+          type: object
+          properties:
+            pointer:
+              type: string
+              example: /data/attributes/nombre
+
+    JsonApiErrorResponse:
+      type: object
+      required:
+        - errors
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonApiError"
+
+  # ── Responses ───────────────────────────────────────────────────────────────
+
+  responses:
+    ValidationError:
+      description: Error de validación (Zod) – uno o más campos inválidos
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: "#/components/schemas/JsonApiErrorResponse"
+          example:
+            errors:
+              - status: "400"
+                title: Datos inválidos
+                detail: El nombre es requerido
+                source:
+                  pointer: /data/attributes/nombre
+              - status: "400"
+                title: Datos inválidos
+                detail: El DNI debe tener entre 7 y 9 dígitos
+                source:
+                  pointer: /data/attributes/dni
+
+    ConflictError:
+      description: Conflicto – DNI o email duplicado
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: "#/components/schemas/JsonApiErrorResponse"
+          example:
+            errors:
+              - status: "409"
+                title: Conflict
+                detail: Ya existe un cliente con ese dni
+                source:
+                  pointer: /data/attributes/dni
+
+    UnsupportedMediaType:
+      description: Content-Type no es `application/vnd.api+json`
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: "#/components/schemas/JsonApiErrorResponse"
+          example:
+            errors:
+              - status: "415"
+                title: Unsupported Media Type
+                detail: Content-Type debe ser application/vnd.api+json
+
+    InternalServerError:
+      description: Error interno del servidor
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: "#/components/schemas/JsonApiErrorResponse"
+          example:
+            errors:
+              - status: "500"
+                title: Internal Server Error
+                detail: Error inesperado
