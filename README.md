@@ -10,3 +10,5 @@ npx prisma db push
 npm run dev
 ``
 Ctrl + C para frenarlo
+
+[Video poc](https://drive.google.com/file/d/14hUSFIosYBAADpx4mYZJPCMZI3FwHRv_/view?usp=sharing)
